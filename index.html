@@ -839,10 +839,11 @@
   <div class="oauth-waiting" id="oauthWaiting">
     <div class="oauth-waiting-title">COMPLETE LOGIN</div>
     <div class="oauth-waiting-text">
-      You were redirected to ListenHub login. After logging in, the browser goes to a page that <strong>fails to load</strong> — that's normal!<br><br>
+      A ListenHub login page has opened in a new tab.<br><br>
+      After you log in, the browser will redirect to a page that <strong>fails to load</strong> — that's normal!<br><br>
       Look at the URL bar — it will look like:<br>
       <code style="color:var(--accent);word-break:break-all">http://localhost:9999/?code=<strong>XXXXXX</strong></code><br><br>
-      Copy the <strong>code value</strong> (everything after <code>code=</code>) and paste below:
+      Copy just the <strong>code value</strong> (after <code>code=</code>) and paste it below:
     </div>
     <div class="oauth-code-row">
       <input type="text" id="oauthCodeInput" placeholder="Paste code here…">
@@ -1034,7 +1035,8 @@
     if (code) {
       // Clean URL immediately
       window.history.replaceState({}, '', window.location.pathname);
-      oauthSessionId = sessionStorage.getItem('lh_session_id');
+      oauthSessionId = sessionStorage.getItem('lh_session_id') || localStorage.getItem('lh_session_id');
+      localStorage.removeItem('lh_session_id');
       if (oauthSessionId) {
         exchangeCode(code);
         return;
@@ -1197,11 +1199,6 @@
     btn.textContent = 'CONNECTING…';
     hideError();
     try {
-      // Use port 9999 — we don't actually run a server,
-      // but the API requires port >= 1024. After login,
-      // ListenHub redirects to http://localhost:9999/?code=XXX
-      // which fails to load (no server), but the user can copy
-      // the code from the URL bar and paste it below.
       const res = await fetch(`${API_BASE}/v1/auth/connect/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1211,11 +1208,16 @@
       if (!res.ok || json.code !== 0) throw new Error(json.message || 'Failed to init OAuth');
       const { sessionId, authUrl } = json.data;
 
+      // Use localStorage so sessionId survives navigation (sessionStorage is
+      // cleared when the tab navigates away, which breaks mobile browsers that
+      // don't support window.open).
+      localStorage.setItem('lh_session_id', sessionId);
       sessionStorage.setItem('lh_session_id', sessionId);
       oauthSessionId = sessionId;
 
-      // Redirect in same tab — after login, ListenHub sends to localhost:9999
-      // which fails to load. User copies code= from URL bar and pastes back here.
+      // Navigate current tab to authUrl — works on all browsers including mobile.
+      // After login, ListenHub redirects back to this page with ?code=XXX and
+      // init() will pick it up automatically.
       window.location.href = authUrl;
     } catch (err) {
       showError(`Login error: ${err.message}`);
@@ -1724,8 +1726,7 @@
       const card = document.createElement('div');
       card.className = 'track-card';
       card.style.animationDelay = (i * 0.08) + 's';
-      const lines = (v.text || '').replace(/</g, '&lt;').replace(/
-/g, '<br>');
+      const lines = (v.text || '').replace(/</g, '&lt;').replace(/\n/g, '<br>');
       card.innerHTML = '<div class="track-title">' + (v.title || 'Variant ' + (i+1)) + '</div>' +
         '<div style="font-size:12px;line-height:1.8;color:var(--muted);margin-top:10px;white-space:pre-wrap">' + lines + '</div>' +
         '<button class="download-btn" style="margin-top:12px" onclick="copyLyrics(this, ' + JSON.stringify(v.text) + ')">📋 COPY LYRICS</button>';
