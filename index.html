@@ -1,0 +1,1805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ListenHub · Music Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111;
+    --border: #222;
+    --accent: #e8ff57;
+    --accent2: #ff4d6d;
+    --text: #f0f0f0;
+    --muted: #555;
+    --track-bg: #161616;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 20px 80px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* animated grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* glowing blob */
+  .blob {
+    position: fixed;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(232,255,87,0.06) 0%, transparent 70%);
+    top: -200px;
+    right: -200px;
+    pointer-events: none;
+    animation: blobDrift 12s ease-in-out infinite alternate;
+  }
+
+  @keyframes blobDrift {
+    from { transform: translate(0,0) scale(1); }
+    to   { transform: translate(-60px, 80px) scale(1.1); }
+  }
+
+  .container {
+    width: 100%;
+    max-width: 620px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  header {
+    margin-bottom: 48px;
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(52px, 10vw, 80px);
+    letter-spacing: 0.02em;
+    line-height: 0.9;
+    color: var(--text);
+  }
+
+  h1 span {
+    color: var(--accent);
+    display: block;
+  }
+
+  .subtitle {
+    margin-top: 16px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  /* Token section */
+  .token-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 32px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .token-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .token-dot.connected { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+  .token-bar input {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    outline: none;
+  }
+  .token-bar input::placeholder { color: var(--muted); }
+
+  .token-bar button {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .token-bar button:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Form */
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  input[type="text"], textarea {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    padding: 14px 16px;
+    outline: none;
+    transition: border-color 0.2s;
+    resize: none;
+  }
+
+  input[type="text"]:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+
+  textarea { height: 80px; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* Toggle */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .toggle-row input[type="checkbox"] { display: none; }
+
+  .toggle-track {
+    width: 32px;
+    height: 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    position: relative;
+    transition: border-color 0.2s, background 0.2s;
+    flex-shrink: 0;
+  }
+
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: transform 0.2s, background 0.2s;
+  }
+
+  input:checked + .toggle-track {
+    border-color: var(--accent);
+    background: rgba(232,255,87,0.1);
+  }
+
+  input:checked + .toggle-track::after {
+    transform: translateX(16px);
+    background: var(--accent);
+  }
+
+  .toggle-label {
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  /* Submit */
+  .submit-btn {
+    width: 100%;
+    margin-top: 28px;
+    padding: 18px;
+    background: var(--accent);
+    color: #0a0a0a;
+    border: none;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .submit-btn:disabled {
+    background: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+
+  .submit-btn:not(:disabled):hover {
+    background: #f5ff80;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 32px rgba(232,255,87,0.2);
+  }
+
+  .submit-btn:not(:disabled):active { transform: translateY(0); }
+
+  /* Status */
+  .status-area {
+    margin-top: 32px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    display: none;
+  }
+
+  .status-area.visible { display: block; }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .status-text { flex: 1; }
+
+  .task-id {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 8px;
+    letter-spacing: 0.05em;
+  }
+
+  /* Results */
+  .results {
+    margin-top: 32px;
+  }
+
+  .results-header {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 0.05em;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .results-header .tick {
+    color: var(--accent);
+    font-size: 20px;
+  }
+
+  .track-card {
+    background: var(--track-bg);
+    border: 1px solid var(--border);
+    padding: 20px;
+    margin-bottom: 12px;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .track-card + .track-card { animation-delay: 0.1s; }
+
+  .track-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+
+  .track-tags {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+  }
+
+  audio {
+    width: 100%;
+    height: 36px;
+    outline: none;
+    filter: invert(1) hue-rotate(180deg) brightness(0.8);
+  }
+
+  .track-duration {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 10px;
+    letter-spacing: 0.05em;
+  }
+
+  /* Error */
+  .error-box {
+    margin-top: 24px;
+    padding: 16px;
+    border: 1px solid var(--accent2);
+    background: rgba(255,77,109,0.05);
+    font-size: 12px;
+    color: var(--accent2);
+    display: none;
+  }
+  .error-box.visible { display: block; }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 32px;
+    border: 1px solid var(--border);
+  }
+
+  .tab-btn {
+    flex: 1;
+    padding: 14px;
+    background: none;
+    border: none;
+    border-right: 1px solid var(--border);
+    color: var(--muted);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tab-btn:last-child { border-right: none; }
+  .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.02); }
+  .tab-btn.active { color: #0a0a0a; background: var(--accent); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* File drop zone */
+  .drop-zone {
+    border: 1px dashed var(--border);
+    background: var(--surface);
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(232,255,87,0.03);
+  }
+
+  .drop-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .drop-icon {
+    font-size: 28px;
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .drop-label {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .drop-label strong { color: var(--text); }
+
+  .file-selected {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    min-height: 16px;
+  }
+
+  .upload-progress {
+    margin-top: 8px;
+    height: 2px;
+    background: var(--border);
+    overflow: hidden;
+    display: none;
+  }
+
+  .upload-progress.visible { display: block; }
+
+  .upload-progress-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+
+  /* History */
+  .history-refresh-btn, .history-page-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .history-refresh-btn:hover, .history-page-btn:not(:disabled):hover {
+    border-color: var(--accent); color: var(--accent);
+  }
+  .history-page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .history-empty {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 32px 0;
+    text-align: center;
+    letter-spacing: 0.05em;
+  }
+
+  .history-card {
+    background: var(--track-bg);
+    border: 1px solid var(--border);
+    padding: 16px;
+    margin-bottom: 10px;
+    animation: fadeUp 0.3s ease both;
+  }
+
+  .history-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+    gap: 8px;
+  }
+
+  .history-card-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 17px;
+    letter-spacing: 0.05em;
+    flex: 1;
+  }
+
+  .history-card-meta {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .history-badge {
+    display: inline-block;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    padding: 2px 7px;
+    border: 1px solid;
+    margin-bottom: 10px;
+  }
+  .history-badge.success { border-color: var(--accent); color: var(--accent); }
+  .history-badge.failed  { border-color: var(--accent2); color: var(--accent2); }
+  .history-badge.pending, .history-badge.generating, .history-badge.uploading {
+    border-color: var(--muted); color: var(--muted);
+  }
+
+  .history-tracks { margin-top: 8px; }
+
+  .history-track-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+  }
+
+  .history-track-row span { flex: 1; color: var(--muted); }
+
+  .history-track-row a {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    text-decoration: none;
+    border: 1px solid var(--accent);
+    padding: 4px 10px;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .history-track-row a:hover { background: var(--accent); color: #0a0a0a; }
+
+  .dl-btn {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    background: none;
+    border: 1px solid var(--accent);
+    padding: 4px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    font-family: 'DM Mono', monospace;
+  }
+  .dl-btn:hover { background: var(--accent); color: #0a0a0a; }
+
+  .history-delete-btn {
+    margin-top: 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    background: none;
+    border: 1px solid var(--accent2);
+    color: var(--accent2);
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .history-delete-btn:hover { background: var(--accent2); color: #fff; }
+  .history-delete-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  select {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  select:focus { border-color: var(--accent) !important; }
+
+  /* Download button */
+  .download-btn {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 8px 16px;
+    background: none;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .download-btn:hover { background: var(--accent); color: #0a0a0a; }
+
+  /* Divider */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 40px 0;
+  }
+
+  .credits {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
+
+  /* Credits bar */
+  .credits-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+  .credits-item {
+    background: var(--surface);
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .credits-label {
+    font-size: 8px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .credits-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+  }
+  .credits-value.warn { color: var(--accent2); }
+
+  /* Login */
+  .login-btn {
+    width: 100%;
+    padding: 18px;
+    background: var(--accent);
+    color: #0a0a0a;
+    border: none;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 12px;
+  }
+  .login-btn:hover { background: #f5ff80; transform: translateY(-1px); }
+  .login-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; transform: none; }
+
+  .login-note {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.03em;
+    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+
+  .divider-small {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+  }
+
+  .manual-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 32px;
+  }
+
+  .manual-row input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    padding: 10px 14px;
+    outline: none;
+  }
+  .manual-row input:focus { border-color: var(--accent); }
+
+  .manual-row button {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 10px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .manual-row button:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Waiting for code overlay */
+  .oauth-waiting {
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    margin-bottom: 20px;
+    display: none;
+  }
+  .oauth-waiting.visible { display: block; }
+  .oauth-waiting-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .oauth-waiting-text { font-size: 11px; color: var(--muted); line-height: 1.7; }
+  .oauth-code-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .oauth-code-row input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    padding: 10px 14px;
+    outline: none;
+  }
+  .oauth-code-row input:focus { border-color: var(--accent); }
+  .oauth-code-row button {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 0.1em;
+    background: var(--accent);
+    border: none;
+    color: #0a0a0a;
+    padding: 10px 18px;
+    cursor: pointer;
+  }
+
+</style>
+</head>
+<body>
+<div class="blob"></div>
+
+<div class="container">
+  <header>
+    <div class="logo">ListenHub · Studio</div>
+    <h1>MAKE<span>MUSIC.</span></h1>
+    <p class="subtitle">AI-powered music generation — generate from a prompt or remix reference audio.</p>
+  </header>
+
+  <!-- Auth -->
+  <div id="authSection">
+    <div id="loginBox">
+      <button class="login-btn" id="loginBtn" onclick="startLogin()">LOG IN WITH LISTENHUB</button>
+      <div class="login-note">Opens ListenHub login in this tab. After logging in you'll return here automatically.</div>
+      <div class="divider-small"></div>
+      <div class="manual-row">
+        <input type="text" id="tokenInput" placeholder="Or paste access token manually…" autocomplete="off">
+        <button onclick="saveToken()">SET</button>
+      </div>
+    </div>
+    <div id="loggedInBox" style="display:none">
+      <div class="token-bar">
+        <div class="token-dot connected"></div>
+        <span id="userLabel" style="flex:1;font-size:12px;color:var(--text)">Logged in</span>
+        <button id="checkinBtn" onclick="submitCheckin()" title="Daily check-in">✓ CHECK-IN</button>
+        <button onclick="logout()">LOG OUT</button>
+      </div>
+      <div id="checkinMsg" style="display:none;font-size:11px;padding:6px 16px;letter-spacing:0.05em"></div>
+    </div>
+  </div>
+
+  <!-- Credits bar -->
+  <div id="creditsBar" style="display:none;margin-bottom:20px">
+    <div class="credits-bar">
+      <div class="credits-item">
+        <div class="credits-label">PLAN</div>
+        <div class="credits-value" id="creditsPlan">—</div>
+      </div>
+      <div class="credits-item">
+        <div class="credits-label">CREDITS</div>
+        <div class="credits-value" id="creditsAvail">—</div>
+      </div>
+      <div class="credits-item">
+        <div class="credits-label">AUDIO LEFT</div>
+        <div class="credits-value" id="creditsAudio">—</div>
+      </div>
+      <div class="credits-item">
+        <div class="credits-label">RESETS</div>
+        <div class="credits-value" id="creditsReset">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proxy config -->
+  <div id="proxyBar" style="display:none;margin-bottom:16px">
+    <div style="font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px">Cloudflare Worker Proxy URL <span style="color:var(--accent2)">(required for Cover)</span></div>
+    <div class="manual-row" style="margin-bottom:0">
+      <input type="text" id="proxyInput" placeholder="https://your-worker.workers.dev" autocomplete="off">
+      <button onclick="saveProxy()">SET</button>
+    </div>
+  </div>
+
+  <!-- OAuth waiting for code -->
+  <div class="oauth-waiting" id="oauthWaiting">
+    <div class="oauth-waiting-title">COMPLETE LOGIN</div>
+    <div class="oauth-waiting-text">
+      You were redirected to ListenHub login. After logging in, the browser goes to a page that <strong>fails to load</strong> — that's normal!<br><br>
+      Look at the URL bar — it will look like:<br>
+      <code style="color:var(--accent);word-break:break-all">http://localhost:9999/?code=<strong>XXXXXX</strong></code><br><br>
+      Copy the <strong>code value</strong> (everything after <code>code=</code>) and paste below:
+    </div>
+    <div class="oauth-code-row">
+      <input type="text" id="oauthCodeInput" placeholder="Paste code here…">
+      <button onclick="submitCode()">OK</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('generate')">GENERATE</button>
+    <button class="tab-btn" onclick="switchTab('cover')">COVER</button>
+    <button class="tab-btn" onclick="switchTab('extend')">EXTEND</button>
+    <button class="tab-btn" onclick="switchTab('lyrics')">LYRICS</button>
+    <button class="tab-btn" onclick="switchTab('history')">HISTORY</button>
+  </div>
+
+  <!-- Generate Panel -->
+  <div class="tab-panel active" id="panel-generate">
+    <div class="form-group">
+      <label>Prompt *</label>
+      <textarea id="prompt" placeholder="Upbeat lo-fi hip hop with jazzy piano chords and warm vinyl crackle…"></textarea>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label>Style / Genre</label>
+        <input type="text" id="style" placeholder="lo-fi, EDM, jazz…">
+      </div>
+      <div class="form-group">
+        <label>Track Title</label>
+        <input type="text" id="title" placeholder="Late Night Study">
+      </div>
+    </div>
+    <label class="toggle-row" for="instrumental">
+      <input type="checkbox" id="instrumental">
+      <span class="toggle-track"></span>
+      <span class="toggle-label">Instrumental only (no vocals)</span>
+    </label>
+    <button class="submit-btn" id="submitBtn" onclick="generate()">GENERATE MUSIC</button>
+  </div>
+
+  <!-- Cover Panel -->
+  <div class="tab-panel" id="panel-cover">
+    <div class="form-group">
+      <label>Reference Audio *</label>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="audioFile" accept=".mp3,.wav,.flac,.m4a,.ogg,.aac" onchange="onFileSelected(this)">
+        <span class="drop-icon">♫</span>
+        <div class="drop-label"><strong>Drop audio file here</strong> or click to browse</div>
+        <div class="drop-label" style="margin-top:6px">mp3, wav, flac, m4a, ogg, aac · max 20MB</div>
+      </div>
+      <div class="file-selected" id="fileSelected"></div>
+      <div class="upload-progress" id="uploadProgress">
+        <div class="upload-progress-bar" id="uploadProgressBar"></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Prompt <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+      <textarea id="coverPrompt" placeholder="Jazzy reinterpretation with upbeat tempo…"></textarea>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label>Style / Genre</label>
+        <input type="text" id="coverStyle" placeholder="jazz, acoustic…">
+      </div>
+      <div class="form-group">
+        <label>Track Title</label>
+        <input type="text" id="coverTitle" placeholder="My Cover">
+      </div>
+    </div>
+    <label class="toggle-row" for="coverInstrumental">
+      <input type="checkbox" id="coverInstrumental">
+      <span class="toggle-track"></span>
+      <span class="toggle-label">Instrumental only (no vocals)</span>
+    </label>
+    <button class="submit-btn" id="coverBtn" onclick="createCover()">CREATE COVER</button>
+  </div>
+
+  <!-- Extend Panel -->
+  <div class="tab-panel" id="panel-extend">
+    <div class="form-group">
+      <label>Reference Audio *</label>
+      <div class="drop-zone" id="dropZoneExtend">
+        <input type="file" id="audioFileExtend" accept=".mp3,.wav,.flac,.m4a,.ogg,.aac" onchange="onExtendFileSelected(this)">
+        <span class="drop-icon">♫</span>
+        <div class="drop-label"><strong>Drop audio file here</strong> or click to browse</div>
+        <div class="drop-label" style="margin-top:6px">mp3, wav, flac, m4a, ogg, aac · max 20MB</div>
+      </div>
+      <div class="file-selected" id="fileSelectedExtend"></div>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label>Model *</label>
+        <select id="extendModel" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:DM Mono,monospace;font-size:13px;padding:14px 16px;outline:none">
+          <option value="V4_5">V4.5</option>
+          <option value="V4_5PLUS">V4.5 Plus</option>
+          <option value="V4_5ALL">V4.5 All</option>
+          <option value="V5" selected>V5</option>
+          <option value="V5_5">V5.5</option>
+          <option value="V4">V4</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Continue At (seconds) *</label>
+        <input type="number" id="extendContinueAt" placeholder="e.g. 30" min="0" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:DM Mono,monospace;font-size:13px;padding:14px 16px;outline:none">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Prompt <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+      <textarea id="extendPrompt" placeholder="Continue with a dramatic orchestral swell…"></textarea>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label>Style / Genre</label>
+        <input type="text" id="extendStyle" placeholder="orchestral, jazz…">
+      </div>
+      <div class="form-group">
+        <label>Track Title</label>
+        <input type="text" id="extendTitle" placeholder="My Extended Track">
+      </div>
+    </div>
+    <label class="toggle-row" for="extendInstrumental">
+      <input type="checkbox" id="extendInstrumental">
+      <span class="toggle-track"></span>
+      <span class="toggle-label">Instrumental only (no vocals)</span>
+    </label>
+    <button class="submit-btn" id="extendBtn" onclick="createExtend()">EXTEND MUSIC</button>
+  </div>
+
+  <!-- Lyrics Panel -->
+  <div class="tab-panel" id="panel-lyrics">
+    <div class="form-group">
+      <label>Prompt * <span style="color:var(--muted);font-size:9px">max 200 chars</span></label>
+      <textarea id="lyricsPrompt" placeholder="A heartfelt Mandarin pop ballad about missing someone far away…" maxlength="200"></textarea>
+      <div id="lyricsCharCount" style="font-size:10px;color:var(--muted);text-align:right;margin-top:4px">0 / 200</div>
+    </div>
+    <button class="submit-btn" id="lyricsBtn" onclick="generateLyrics()">GENERATE LYRICS</button>
+    <div id="lyricsResults" style="margin-top:24px"></div>
+  </div>
+
+  <!-- History Panel -->
+  <div class="tab-panel" id="panel-history">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase">Your past tracks</div>
+      <button class="history-refresh-btn" onclick="loadHistory()">↻ REFRESH</button>
+    </div>
+    <div id="historyList"><div class="history-empty">Tap REFRESH to load your music history.</div></div>
+    <div style="display:flex;gap:8px;margin-top:20px;align-items:center;justify-content:center">
+      <button class="history-page-btn" id="historyPrev" onclick="historyPage(-1)" disabled>← PREV</button>
+      <span id="historyPageLabel" style="font-size:11px;color:var(--muted)">Page 1</span>
+      <button class="history-page-btn" id="historyNext" onclick="historyPage(1)" disabled>NEXT →</button>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- Status -->
+  <div class="status-area" id="statusArea">
+    <div class="status-row">
+      <div class="spinner" id="spinner"></div>
+      <span class="status-text" id="statusText">Submitting…</span>
+    </div>
+    <div class="task-id" id="taskIdDisplay"></div>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="results"></div>
+
+  <hr class="divider">
+  <p class="credits">Powered by <a href="https://listenhub.ai" style="color:var(--accent);text-decoration:none">listenhub.ai</a> · SDK v1</p>
+</div>
+
+<script>
+  const API_BASE = 'https://api.listenhub.ai/api';
+  // Cloudflare Worker proxy URL — set this after deploying worker.js
+  // Leave empty to attempt direct GCS upload (may fail on some browsers)
+  let PROXY_URL = localStorage.getItem('lh_proxy') || '';
+  let accessToken = localStorage.getItem('lh_token') || '';
+  let refreshToken = localStorage.getItem('lh_refresh') || '';
+  let oauthSessionId = null;
+  let selectedFile = null;
+  let activeTab = 'generate';
+
+  // --- Init ---
+  function init() {
+    // Check URL for OAuth callback code
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) {
+      // Clean URL immediately
+      window.history.replaceState({}, '', window.location.pathname);
+      oauthSessionId = sessionStorage.getItem('lh_session_id');
+      if (oauthSessionId) {
+        exchangeCode(code);
+        return;
+      }
+    }
+
+    // Restore token
+    if (accessToken) fetchAndShowUser();
+    else showLoggedOut();
+
+    // Manual token input listener
+    const input = document.getElementById('tokenInput');
+    if (input) {
+      input.addEventListener('input', () => { accessToken = input.value.trim(); });
+    }
+
+    // Drag and drop — cover
+    const zone = document.getElementById('dropZone');
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) setFile(file);
+    });
+
+    // Drag and drop — extend
+    const zoneE = document.getElementById('dropZoneExtend');
+    if (zoneE) {
+      zoneE.addEventListener('dragover', e => { e.preventDefault(); zoneE.classList.add('drag-over'); });
+      zoneE.addEventListener('dragleave', () => zoneE.classList.remove('drag-over'));
+      zoneE.addEventListener('drop', e => {
+        e.preventDefault();
+        zoneE.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) setExtendFile(file);
+      });
+    }
+
+    // Lyrics char counter
+    const lp = document.getElementById('lyricsPrompt');
+    if (lp) lp.addEventListener('input', () => {
+      document.getElementById('lyricsCharCount').textContent = lp.value.length + ' / 200';
+    });
+  }
+
+  // --- Check-in ---
+  async function submitCheckin() {
+    const btn = document.getElementById('checkinBtn');
+    const msg = document.getElementById('checkinMsg');
+    btn.disabled = true;
+    btn.textContent = '…';
+    msg.style.display = 'none';
+    try {
+      const data = await apiPost('/v1/checkin', { platform: 'listenhub' });
+      // Also fetch status for streak info
+      const status = await apiGet('/v1/checkin/status').catch(() => null);
+      btn.textContent = '✓ CHECK-IN';
+      msg.style.display = 'block';
+      msg.style.color = 'var(--accent)';
+      const streak = status?.streak ?? data?.streak ?? null;
+      const reward = data?.creditsRewarded ?? data?.reward ?? null;
+      let text = '✓ Check-in successful!';
+      if (streak) text += '  🔥 ' + streak + ' day streak';
+      if (reward) text += '  +' + reward + ' credits';
+      msg.textContent = text;
+      // Refresh credits after checkin
+      fetchSubscription();
+      setTimeout(() => { msg.style.display = 'none'; }, 5000);
+    } catch (err) {
+      btn.textContent = '✓ CHECK-IN';
+      btn.disabled = false;
+      msg.style.display = 'block';
+      msg.style.color = 'var(--accent2)';
+      msg.textContent = err.message.includes('already') || err.message.includes('checkin')
+        ? '✓ Already checked in today'
+        : 'Check-in failed: ' + err.message;
+      setTimeout(() => { msg.style.display = 'none'; }, 4000);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // --- Auth state ---
+  function showLoggedIn(label) {
+    document.getElementById('loginBox').style.display = 'none';
+    document.getElementById('loggedInBox').style.display = 'block';
+    if (label) document.getElementById('userLabel').textContent = label;
+  }
+
+  async function fetchAndShowUser() {
+    showLoggedIn('Logged in…');
+    try {
+      const user = await apiGet('/v1/users/me');
+      const name = user.nickname || user.email || 'User';
+      showLoggedIn('👤 ' + name);
+    } catch {
+      showLoggedIn('Logged in');
+    }
+    fetchSubscription();
+  }
+
+  async function fetchSubscription() {
+    try {
+      const sub = await apiGet('/v1/users/subscription');
+      const bar = document.getElementById('creditsBar');
+      bar.style.display = 'block';
+
+      // Plan name
+      const planName = sub.subscriptionPlan?.name || (sub.paidStatus ? 'Pro' : 'Free');
+      document.getElementById('creditsPlan').textContent = planName;
+
+      // Total available credits
+      const avail = sub.totalAvailableCredits ?? sub.usageAvailableMonthlyCredits ?? '—';
+      const total = sub.usageTotalMonthlyCredits ?? '—';
+      const availEl = document.getElementById('creditsAvail');
+      availEl.textContent = avail + (total !== '—' ? '/' + total : '');
+      if (typeof avail === 'number' && typeof total === 'number' && avail / total < 0.2) {
+        availEl.classList.add('warn');
+      }
+
+      // Audio generation remaining
+      const audioAvail = sub.usageAudioGenerateAvailableAmount ?? '—';
+      const audioUsed = sub.usageAudioGenerateUsedAmount ?? 0;
+      const audioEl = document.getElementById('creditsAudio');
+      audioEl.textContent = typeof audioAvail === 'number' ? audioAvail : '—';
+      if (typeof audioAvail === 'number' && audioAvail < 5) audioEl.classList.add('warn');
+
+      // Reset date
+      const resetEl = document.getElementById('creditsReset');
+      if (sub.resetAt) {
+        const d = new Date(sub.resetAt);
+        resetEl.textContent = (d.getMonth()+1) + '/' + d.getDate();
+      } else {
+        resetEl.textContent = '—';
+      }
+    } catch (err) {
+      console.log('Subscription fetch failed:', err.message);
+    }
+  }
+
+  function showLoggedOut() {
+    document.getElementById('loginBox').style.display = 'block';
+    document.getElementById('loggedInBox').style.display = 'none';
+  }
+
+  function logout() {
+    accessToken = '';
+    refreshToken = '';
+    localStorage.removeItem('lh_token');
+    localStorage.removeItem('lh_refresh');
+    showLoggedOut();
+  }
+
+  // --- OAuth ---
+  async function startLogin() {
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+    btn.textContent = 'CONNECTING…';
+    hideError();
+    try {
+      // Use port 9999 — we don't actually run a server,
+      // but the API requires port >= 1024. After login,
+      // ListenHub redirects to http://localhost:9999/?code=XXX
+      // which fails to load (no server), but the user can copy
+      // the code from the URL bar and paste it below.
+      const res = await fetch(`${API_BASE}/v1/auth/connect/init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callbackPort: 9999 }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.code !== 0) throw new Error(json.message || 'Failed to init OAuth');
+      const { sessionId, authUrl } = json.data;
+
+      sessionStorage.setItem('lh_session_id', sessionId);
+      oauthSessionId = sessionId;
+
+      // Redirect in same tab — after login, ListenHub sends to localhost:9999
+      // which fails to load. User copies code= from URL bar and pastes back here.
+      window.location.href = authUrl;
+    } catch (err) {
+      showError(`Login error: ${err.message}`);
+      btn.disabled = false;
+      btn.textContent = 'LOG IN WITH LISTENHUB';
+    }
+  }
+
+  async function exchangeCode(code) {
+    document.getElementById('oauthWaiting').classList.add('visible');
+    setStatus('Completing login…');
+    try {
+      const res = await fetch(`${API_BASE}/v1/auth/connect/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: oauthSessionId, code }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.code !== 0) throw new Error(json.message || 'Token exchange failed');
+      const tokens = json.data;
+      accessToken = tokens.accessToken;
+      refreshToken = tokens.refreshToken;
+      localStorage.setItem('lh_token', accessToken);
+      localStorage.setItem('lh_refresh', refreshToken);
+      sessionStorage.removeItem('lh_session_id');
+      hideStatus();
+      document.getElementById('oauthWaiting').classList.remove('visible');
+
+      // Fetch user info
+      try {
+        const user = await apiGet('/v1/users/me');
+        showLoggedIn(`Logged in as ${user.nickname || user.email || 'user'}`);
+      } catch {
+        showLoggedIn('Logged in');
+      }
+    } catch (err) {
+      hideStatus();
+      showError(`Login failed: ${err.message}`);
+      showLoggedOut();
+    }
+  }
+
+  async function submitCode() {
+    const code = document.getElementById('oauthCodeInput').value.trim();
+    if (!code) return;
+    oauthSessionId = sessionStorage.getItem('lh_session_id');
+    if (!oauthSessionId) { showError('Session expired. Please try logging in again.'); return; }
+    await exchangeCode(code);
+  }
+
+  // --- Tabs ---
+  function switchTab(tab) {
+    activeTab = tab;
+    const tabNames = ['generate','cover','extend','lyrics','history'];
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+      b.classList.toggle('active', tabNames[i] === tab);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      p.classList.toggle('active', p.id === 'panel-' + tab);
+    });
+    hideError();
+    hideStatus();
+    document.getElementById('results').innerHTML = '';
+    if (tab === 'history' && accessToken) loadHistory();
+    // Show proxy bar on cover or extend tab
+    const proxyBar = document.getElementById('proxyBar');
+    if (proxyBar) {
+      proxyBar.style.display = (tab === 'cover' || tab === 'extend') ? 'block' : 'none';
+      if (tab === 'cover' || tab === 'extend') {
+        const proxyInput = document.getElementById('proxyInput');
+        if (proxyInput && PROXY_URL) proxyInput.value = PROXY_URL;
+      }
+    }
+  }
+
+  // --- Download ---
+  function downloadTrack(audioUrl, filename) {
+    const proxyUrl = PROXY_URL.trim().replace(/\/$/, '');
+    if (proxyUrl) {
+      // Open worker download URL directly in new tab — browser will save the file
+      const dlUrl = proxyUrl + '/download?url=' + encodeURIComponent(audioUrl) + '&filename=' + encodeURIComponent(filename);
+      window.open(dlUrl, '_blank');
+    } else {
+      // No proxy — open audio URL directly
+      window.open(audioUrl, '_blank');
+    }
+  }
+
+  // --- History ---
+  let historyCurrentPage = 1;
+  const HISTORY_PAGE_SIZE = 10;
+
+  async function loadHistory(page) {
+    if (!accessToken) {
+      document.getElementById('historyList').innerHTML = '<div class="history-empty">Log in to view history.</div>';
+      return;
+    }
+    page = page || historyCurrentPage;
+    historyCurrentPage = page;
+    document.getElementById('historyList').innerHTML = '<div class="history-empty">Loading…</div>';
+    try {
+      const data = await apiGet(`/v1/music/tasks?page=${page}&pageSize=${HISTORY_PAGE_SIZE}`);
+      const items = data.items || [];
+      renderHistory(items, page);
+    } catch (err) {
+      document.getElementById('historyList').innerHTML = `<div class="history-empty">Error: ${err.message}</div>`;
+    }
+  }
+
+  function historyPage(dir) {
+    const next = historyCurrentPage + dir;
+    if (next < 1) return;
+    loadHistory(next);
+  }
+
+  async function deleteTask(taskId, btn) {
+    if (!confirm('Delete this track from the server?')) return;
+    btn.disabled = true;
+    btn.textContent = 'Deleting…';
+    try {
+      // Try music task delete endpoint first
+      let res = await fetch(`${API_BASE}/v1/music/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: { ...authHeaders() },
+      });
+
+      // Fall back to episodes bulk delete
+      if (res.status === 404 || res.status === 405) {
+        res = await fetch(`${API_BASE}/v1/episodes`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ ids: [taskId] }),
+        });
+      }
+
+      if (res.ok || res.status === 204) {
+        btn.closest('.history-card').style.opacity = '0.3';
+        btn.textContent = '✓ Deleted';
+      } else {
+        const j = await res.json().catch(() => ({}));
+        // If API doesn't support delete, just hide it locally
+        if (res.status === 404 || res.status === 405 || res.status === 403) {
+          btn.closest('.history-card').style.opacity = '0.3';
+          btn.textContent = '✓ Hidden';
+          // Store hidden IDs in localStorage
+          const hidden = JSON.parse(localStorage.getItem('lh_hidden') || '[]');
+          hidden.push(taskId);
+          localStorage.setItem('lh_hidden', JSON.stringify(hidden));
+        } else {
+          alert('Delete failed: ' + (j.message || res.status));
+          btn.disabled = false;
+          btn.textContent = '🗑 DELETE';
+        }
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = '🗑 DELETE';
+    }
+  }
+
+  function renderHistory(items, page) {
+    const container = document.getElementById('historyList');
+    document.getElementById('historyPageLabel').textContent = `Page ${page}`;
+    document.getElementById('historyPrev').disabled = page <= 1;
+    document.getElementById('historyNext').disabled = items.length < HISTORY_PAGE_SIZE;
+
+    // Filter locally hidden tasks
+    const hidden = JSON.parse(localStorage.getItem('lh_hidden') || '[]');
+    const visible = items.filter(t => !hidden.includes(t.id));
+
+    if (visible.length === 0) {
+      container.innerHTML = '<div class="history-empty">No music tasks found.</div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    visible.forEach((task, i) => {
+      const card = document.createElement('div');
+      card.className = 'history-card';
+      card.style.animationDelay = `${i * 0.04}s`;
+
+      const date = new Date(task.createdAt).toLocaleDateString('sv-SE');
+      const typeLabel = task.taskType === 'COVER' ? 'COVER' : 'GENERATE';
+      const title = task.tracks[0]?.title || task.params?.title || 'Untitled';
+
+      let tracksHtml = '';
+      if (task.status === 'success' && task.tracks.length > 0) {
+        tracksHtml = '<div class="history-tracks">';
+        task.tracks.forEach((track, ti) => {
+          const fname = (track.title || 'track').replace(/[/\\:*?"<>|]/g, '_').trim() + '.mp3';
+          tracksHtml += `
+            <div class="history-track-row">
+              <span>${track.title || 'Track ' + (ti+1)} · ${formatDuration(track.duration)}</span>
+              <button class="dl-btn" onclick="refreshAndDownload('${track.audioUrl}', '${fname}')">⬇ MP3</button>
+            </div>`;
+        });
+        tracksHtml += '</div>';
+      } else if (task.status === 'failed') {
+        tracksHtml = `<div style="font-size:11px;color:var(--accent2);margin-top:6px">${task.errorMessage || 'Failed'}</div>`;
+      }
+
+      card.innerHTML = `
+        <div class="history-card-header">
+          <div class="history-card-title">${title}</div>
+          <div class="history-card-meta">${date} · ${typeLabel}</div>
+        </div>
+        <div class="history-badge ${task.status}">${task.status.toUpperCase()}</div>
+        ${tracksHtml}
+        <button class="history-delete-btn" onclick="deleteTask('${task.id}', this)">🗑 DELETE</button>
+      `;
+      container.appendChild(card);
+    });
+  }
+
+  // --- Token ---
+  function saveProxy() {
+    const url = document.getElementById('proxyInput').value.trim();
+    PROXY_URL = url;
+    if (url) localStorage.setItem('lh_proxy', url);
+    else localStorage.removeItem('lh_proxy');
+  }
+
+  function saveToken() {
+    accessToken = document.getElementById('tokenInput').value.trim();
+    if (accessToken) {
+      localStorage.setItem('lh_token', accessToken);
+      fetchAndShowUser();
+    }
+  }
+
+  // --- File ---
+  function onFileSelected(input) {
+    if (input.files[0]) setFile(input.files[0]);
+  }
+  function setFile(file) {
+    const MAX = 20 * 1024 * 1024;
+    const allowed = ['audio/mpeg','audio/wav','audio/flac','audio/mp4','audio/ogg','audio/aac','audio/x-m4a'];
+    if (file.size > MAX) { showError('File too large (max 20MB).'); return; }
+    selectedFile = file;
+    document.getElementById('fileSelected').textContent = `✓ ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`;
+  }
+
+  // --- UI helpers ---
+  function showError(msg) {
+    const box = document.getElementById('errorBox');
+    box.textContent = msg;
+    box.classList.add('visible');
+  }
+  function hideError() { document.getElementById('errorBox').classList.remove('visible'); }
+
+  function setStatus(text) {
+    document.getElementById('statusArea').classList.add('visible');
+    document.getElementById('statusText').textContent = text;
+    document.getElementById('spinner').style.display = 'block';
+  }
+  function setTaskId(id) {
+    document.getElementById('taskIdDisplay').textContent = id ? `Task ID: ${id}` : '';
+  }
+  function hideStatus() { document.getElementById('statusArea').classList.remove('visible'); }
+
+  function setLoading(btnId, on, labelOn, labelOff) {
+    const btn = document.getElementById(btnId);
+    btn.disabled = on;
+    btn.textContent = on ? labelOn : labelOff;
+  }
+
+  function setUploadProgress(pct) {
+    const bar = document.getElementById('uploadProgress');
+    bar.classList.toggle('visible', pct !== null);
+    if (pct !== null) document.getElementById('uploadProgressBar').style.width = pct + '%';
+  }
+
+  function formatDuration(s) {
+    return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+  }
+
+  function renderResults(tracks) {
+    const container = document.getElementById('results');
+    container.innerHTML = `<div class="results-header"><span class="tick">✓</span> ${tracks.length} Track${tracks.length!==1?'s':''} Ready — <span style="font-size:14px;color:var(--muted)">Downloading now…</span></div>`;
+    tracks.forEach((track, i) => {
+      const card = document.createElement('div');
+      card.className = 'track-card';
+      card.style.animationDelay = `${i*0.08}s`;
+      const filename = (track.title || 'track').replace(/[/\\:*?"<>|]/g, '_').trim() + '.mp3';
+      card.innerHTML = `
+        <div class="track-title">${track.title || 'Untitled'}</div>
+        <div class="track-tags">${track.tags || ''}</div>
+        <audio controls src="${track.audioUrl}"></audio>
+        <div class="track-duration">${formatDuration(track.duration)}</div>
+        <button class="download-btn" onclick="downloadTrack('${track.audioUrl}', '${filename}')">⬇ DOWNLOAD MP3</button>
+      `;
+      container.appendChild(card);
+
+      // Auto-download immediately while URL is still fresh
+      setTimeout(() => downloadTrack(track.audioUrl, filename), i * 1500);
+    });
+  }
+
+  // --- API ---
+  function authHeaders() {
+    // lh_sk_ keys: try both Bearer and X-API-Key (server decides which works)
+    if (accessToken.startsWith('lh_sk_')) {
+      return {
+        'Authorization': `Bearer ${accessToken}`,
+        'X-API-Key': accessToken,
+      };
+    }
+    return { 'Authorization': `Bearer ${accessToken}` };
+  }
+
+  async function apiPost(path, body) {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (!res.ok || json.code !== 0) throw new Error(json.message || `HTTP ${res.status}`);
+    return json.data;
+  }
+
+  async function apiGet(path) {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { ...authHeaders() },
+    });
+    const json = await res.json();
+    if (!res.ok || json.code !== 0) throw new Error(json.message || `HTTP ${res.status}`);
+    return json.data;
+  }
+
+  async function uploadFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    const mimeMap = {mp3:'audio/mpeg',wav:'audio/wav',flac:'audio/flac',m4a:'audio/x-m4a',ogg:'audio/ogg',aac:'audio/aac',mp4:'audio/mp4'};
+    const contentType = mimeMap[ext] || file.type || 'audio/mpeg';
+
+    // Use simple ASCII timestamped filename — avoids Chinese char encoding issues
+    const safeFileName = 'cover_' + Date.now() + '.' + ext;
+    console.log('safeFileName:', safeFileName);
+
+    setUploadProgress(10);
+    const result = await apiPost('/v1/files', {fileKey: safeFileName, contentType, category: 'episode'});
+    const presignedUrl = result.presignedUrl;
+    const fileUrl = result.fileUrl;
+    console.log('presignedUrl:', presignedUrl);
+    console.log('fileUrl:', fileUrl);
+    setUploadProgress(30);
+
+    const proxyUrl = PROXY_URL.trim().replace(/\/$/, '');
+    if (!proxyUrl) throw new Error('Proxy not configured.');
+
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+    setUploadProgress(60);
+
+    const proxyRes = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({presignedUrl, contentType, fileData: base64}),
+    });
+    const proxyData = await proxyRes.json().catch(() => ({}));
+    console.log('proxy response:', proxyRes.status, JSON.stringify(proxyData));
+    if (!proxyRes.ok) throw new Error(proxyData.error || ('Proxy failed: ' + proxyRes.status));
+    setUploadProgress(100);
+
+    // Try the presignedUrl base (without query params) as uploadUrl
+    // The server may need the exact GCS object URL from the presigned URL
+    const presignedBase = presignedUrl.split('?')[0]; // strip signature params
+    const pathnameFromPresigned = new URL(presignedBase).pathname;
+    const uploadUrl = 'https://storage.googleapis.com' + pathnameFromPresigned;
+    console.log('uploadUrl (from presigned):', uploadUrl);
+    console.log('uploadUrl (from fileUrl):', 'https://storage.googleapis.com' + new URL(fileUrl).pathname);
+    return uploadUrl;
+  }
+
+
+  async function pollUntilDone(taskId, timeoutMs = 600_000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      await new Promise(r => setTimeout(r, 10_000));
+      const task = await apiGet(`/v1/music/tasks/${taskId}`);
+      setStatus(`Status: ${task.status}…`);
+      if (task.status === 'success') return task;
+      if (task.status === 'failed') throw new Error(task.errorMessage || 'Generation failed');
+    }
+    throw new Error('Timed out after 10 minutes');
+  }
+
+  // --- Generate ---
+  async function generate() {
+    hideError();
+    document.getElementById('results').innerHTML = '';
+    if (!accessToken) { showError('Please set your ListenHub access token first.'); return; }
+    const prompt = document.getElementById('prompt').value.trim();
+    if (!prompt) { showError('Prompt is required.'); return; }
+
+    const style = document.getElementById('style').value.trim();
+    const title = document.getElementById('title').value.trim();
+    const instrumental = document.getElementById('instrumental').checked;
+
+    setLoading('submitBtn', true, 'GENERATING…', 'GENERATE MUSIC');
+    setStatus('Submitting task…');
+    try {
+      const body = { prompt, provider: 'default', ...(style && {style}), ...(title && {title}), ...(instrumental && {instrumental:true}) };
+      const result = await apiPost('/v1/music/generate', body);
+      setTaskId(result.taskId);
+      setStatus('Task submitted. Generating music…');
+      const task = await pollUntilDone(result.taskId);
+      hideStatus();
+      renderResults(task.tracks);
+    } catch (err) {
+      hideStatus();
+      showError(`Error: ${err.message}`);
+    } finally {
+      setLoading('submitBtn', false, '', 'GENERATE MUSIC');
+    }
+  }
+
+  // --- Extend file ---
+  let selectedExtendFile = null;
+  function onExtendFileSelected(input) { if (input.files[0]) setExtendFile(input.files[0]); }
+  function setExtendFile(file) {
+    if (file.size > 20*1024*1024) { showError('File too large (max 20MB).'); return; }
+    selectedExtendFile = file;
+    document.getElementById('fileSelectedExtend').textContent = '✓ ' + file.name + ' (' + (file.size/1024/1024).toFixed(2) + ' MB)';
+  }
+
+  // --- Extend ---
+  async function createExtend() {
+    hideError();
+    document.getElementById('results').innerHTML = '';
+    if (!accessToken) { showError('Please log in first.'); return; }
+    if (!selectedExtendFile) { showError('Please select a reference audio file.'); return; }
+    const continueAt = parseFloat(document.getElementById('extendContinueAt').value);
+    if (isNaN(continueAt)) { showError('Continue At (seconds) is required.'); return; }
+    const model = document.getElementById('extendModel').value;
+    const prompt = document.getElementById('extendPrompt').value.trim();
+    const style = document.getElementById('extendStyle').value.trim();
+    const title = document.getElementById('extendTitle').value.trim();
+    const instrumental = document.getElementById('extendInstrumental').checked;
+
+    setLoading('extendBtn', true, 'UPLOADING…', 'EXTEND MUSIC');
+    setStatus('Uploading audio file…');
+    try {
+      const uploadUrl = await uploadFile(selectedExtendFile);
+      setStatus('Submitting extend task…');
+      setLoading('extendBtn', true, 'GENERATING…', 'EXTEND MUSIC');
+      const body = { uploadUrl, model, continueAt, provider: 'default',
+        ...(prompt && {prompt}), ...(style && {style}), ...(title && {title}),
+        ...(instrumental && {instrumental: true}) };
+      const result = await apiPost('/v1/music/extend', body);
+      setTaskId(result.taskId);
+      setStatus('Extend submitted. Generating…');
+      const task = await pollUntilDone(result.taskId);
+      hideStatus();
+      renderResults(task.tracks);
+    } catch (err) {
+      hideStatus();
+      showError('Error: ' + err.message);
+    } finally {
+      setLoading('extendBtn', false, '', 'EXTEND MUSIC');
+    }
+  }
+
+  // --- Lyrics ---
+  async function generateLyrics() {
+    hideError();
+    const resultsEl = document.getElementById('lyricsResults');
+    resultsEl.innerHTML = '';
+    if (!accessToken) { showError('Please log in first.'); return; }
+    const prompt = document.getElementById('lyricsPrompt').value.trim();
+    if (!prompt) { showError('Prompt is required.'); return; }
+
+    setLoading('lyricsBtn', true, 'GENERATING…', 'GENERATE LYRICS');
+    setStatus('Generating lyrics…');
+    try {
+      const result = await apiPost('/v1/lyrics/generate', { prompt });
+      setStatus('Polling for lyrics…');
+      // Poll for completion
+      const start = Date.now();
+      let task;
+      while (Date.now() - start < 120_000) {
+        await new Promise(r => setTimeout(r, 4000));
+        task = await apiGet('/v1/lyrics/tasks/' + result.taskId);
+        setStatus('Status: ' + task.status + '…');
+        if (task.status === 'success' || task.status === 'failed') break;
+      }
+      hideStatus();
+      if (!task || task.status === 'failed') throw new Error(task?.errorMessage || 'Lyrics generation failed');
+      renderLyrics(task.variants);
+    } catch (err) {
+      hideStatus();
+      showError('Error: ' + err.message);
+    } finally {
+      setLoading('lyricsBtn', false, '', 'GENERATE LYRICS');
+    }
+  }
+
+  function renderLyrics(variants) {
+    const el = document.getElementById('lyricsResults');
+    el.innerHTML = '<div class="results-header"><span class="tick">✓</span> ' + variants.length + ' Variant' + (variants.length !== 1 ? 's' : '') + '</div>';
+    variants.forEach((v, i) => {
+      const card = document.createElement('div');
+      card.className = 'track-card';
+      card.style.animationDelay = (i * 0.08) + 's';
+      const lines = (v.text || '').replace(/</g, '&lt;').replace(/
+/g, '<br>');
+      card.innerHTML = '<div class="track-title">' + (v.title || 'Variant ' + (i+1)) + '</div>' +
+        '<div style="font-size:12px;line-height:1.8;color:var(--muted);margin-top:10px;white-space:pre-wrap">' + lines + '</div>' +
+        '<button class="download-btn" style="margin-top:12px" onclick="copyLyrics(this, ' + JSON.stringify(v.text) + ')">📋 COPY LYRICS</button>';
+      el.appendChild(card);
+    });
+  }
+
+  function copyLyrics(btn, text) {
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = '✓ COPIED!';
+      setTimeout(() => btn.textContent = '📋 COPY LYRICS', 2000);
+    }).catch(() => {
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      btn.textContent = '✓ COPIED!';
+      setTimeout(() => btn.textContent = '📋 COPY LYRICS', 2000);
+    });
+  }
+
+  // --- Refresh expired download URL ---
+  async function refreshAndDownload(audioUrl, filename) {
+    try {
+      const data = await apiGet('/v1/files?fileUrl=' + encodeURIComponent(audioUrl));
+      const freshUrl = data.downloadUrl || audioUrl;
+      downloadTrack(freshUrl, filename);
+    } catch {
+      downloadTrack(audioUrl, filename);
+    }
+  }
+
+  // --- Cover ---
+  async function createCover() {
+    hideError();
+    document.getElementById('results').innerHTML = '';
+    if (!accessToken) { showError('Please set your ListenHub access token first.'); return; }
+    if (!selectedFile) { showError('Please select a reference audio file.'); return; }
+
+    const prompt = document.getElementById('coverPrompt').value.trim();
+    const style = document.getElementById('coverStyle').value.trim();
+    const title = document.getElementById('coverTitle').value.trim();
+    const instrumental = document.getElementById('coverInstrumental').checked;
+
+    setLoading('coverBtn', true, 'UPLOADING…', 'CREATE COVER');
+    setStatus('Uploading audio file…');
+    setUploadProgress(0);
+
+    try {
+      const uploadUrl = await uploadFile(selectedFile);
+      setUploadProgress(null);
+      setStatus('Submitting cover task…');
+      setLoading('coverBtn', true, 'GENERATING…', 'CREATE COVER');
+
+      const body = { uploadUrl, provider: 'default', ...(prompt && {prompt}), ...(style && {style}), ...(title && {title}), ...(instrumental && {instrumental:true}) };
+      const result = await apiPost('/v1/music/cover', body);
+      setTaskId(result.taskId);
+      setStatus('Cover submitted. Generating…');
+      const task = await pollUntilDone(result.taskId);
+      hideStatus();
+      renderResults(task.tracks);
+    } catch (err) {
+      setUploadProgress(null);
+      hideStatus();
+      showError(`Error: ${err.message}`);
+    } finally {
+      setLoading('coverBtn', false, '', 'CREATE COVER');
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>
