@@ -1029,14 +1029,12 @@
 
   // --- Init ---
   function init() {
-    // Check URL for OAuth callback code
+    // Check URL for OAuth callback code (redirected back from worker or manually entered)
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     if (code) {
-      // Clean URL immediately
       window.history.replaceState({}, '', window.location.pathname);
-      oauthSessionId = sessionStorage.getItem('lh_session_id') || localStorage.getItem('lh_session_id');
-      localStorage.removeItem('lh_session_id');
+      oauthSessionId = sessionStorage.getItem('lh_session_id');
       if (oauthSessionId) {
         exchangeCode(code);
         return;
@@ -1199,28 +1197,41 @@
     btn.textContent = 'CONNECTING…';
     hideError();
     try {
-      const res = await fetch(`${API_BASE}/v1/auth/connect/init`, {
+      const res = await fetch(API_BASE + '/v1/auth/connect/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ callbackPort: 9999 }),
       });
-      const json = await res.json();
-      if (!res.ok || json.code !== 0) throw new Error(json.message || 'Failed to init OAuth');
-      const { sessionId, authUrl } = json.data;
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) throw new Error(data.message || 'Failed to init OAuth');
+      const sessionId = data.data.sessionId;
+      let authUrl = data.data.authUrl;
 
-      // Use localStorage so sessionId survives navigation (sessionStorage is
-      // cleared when the tab navigates away, which breaks mobile browsers that
-      // don't support window.open).
-      localStorage.setItem('lh_session_id', sessionId);
       sessionStorage.setItem('lh_session_id', sessionId);
       oauthSessionId = sessionId;
 
-      // Navigate current tab to authUrl — works on all browsers including mobile.
-      // After login, ListenHub redirects back to this page with ?code=XXX and
-      // init() will pick it up automatically.
+      // If worker proxy is configured, append state=appUrl so worker
+      // can redirect back here automatically after login
+      const proxyUrl = PROXY_URL.trim().replace(/\/$/, '');
+      if (proxyUrl) {
+        const appUrl = window.location.href.split('?')[0];
+        // Replace localhost:9999 callback in authUrl with our worker URL
+        authUrl = authUrl.replace(
+          /http:\/\/localhost:\d+/,
+          proxyUrl
+        );
+        // Append state param with app URL for redirect back
+        authUrl += (authUrl.includes('?') ? '&' : '?') + 'state=' + encodeURIComponent(appUrl);
+      }
+
+      // Show manual code entry box (fallback if redirect doesn't work)
+      document.getElementById('oauthWaiting').classList.add('visible');
+      document.getElementById('loginBox').style.display = 'none';
+
+      // Open login — same tab so redirect comes back here
       window.location.href = authUrl;
     } catch (err) {
-      showError(`Login error: ${err.message}`);
+      showError('Login error: ' + err.message);
       btn.disabled = false;
       btn.textContent = 'LOG IN WITH LISTENHUB';
     }
